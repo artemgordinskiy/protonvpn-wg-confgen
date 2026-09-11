@@ -1,5 +1,48 @@
 # protonvpn-wg-confgen
 
+This fork adds `--netshield 0|1|2`, `--password-stdin`, and private file
+replacement for configurations and saved sessions. Build this checkout with
+`make build`; the upstream release links below do not include these changes.
+
+For a local profile with NAT-PMP and malware blocking:
+
+```bash
+./build/protonvpn-wg-confgen --username YOUR_USERNAME --countries NL \
+  --port-forwarding --netshield 1 --no-session \
+  --device-name local-trial --output ./trial.conf
+```
+
+The password is prompted without echo. A password manager can instead pipe a
+single password to `--password-stdin`, with `--username` supplied explicitly:
+
+```bash
+op read 'op://Personal/Proton/password' | \
+  ./build/protonvpn-wg-confgen --username YOUR_USERNAME --password-stdin \
+  --countries NL --port-forwarding --netshield 1 --no-session \
+  --device-name local-trial --output ./trial.conf
+```
+
+Replace the example 1Password reference with your own. Stdin is read through EOF;
+one trailing LF or CRLF is removed, spaces are preserved, and empty or multiline
+input is rejected. `--password` and `--password-stdin` are mutually exclusive.
+With piped passwords, TOTP is requested on `/dev/tty` (macOS/Linux); without a
+controlling terminal, or on Windows, use interactive login for TOTP. A reusable
+saved session can avoid the password prompt on subsequent runs. The example
+uses `--no-session` so a trial does not save authentication tokens.
+
+Config and session writes use a temporary file in the destination directory,
+enforce mode `0600` on Unix even when replacing a permissive file, then rename
+the completed file into place. Replacement is atomic on Unix; Go does not
+guarantee atomic rename on Windows, where file access also depends on ACLs.
+Final-component symlinks and non-regular files are rejected. Use a trusted parent
+directory. Generating a profile registers a configuration on the Proton account
+but does not activate WireGuard or replace a running VPN unless the output path
+is explicitly set to its configuration file.
+
+When renewing, pass all desired feature flags again, including
+`--netshield 1 --port-forwarding` where needed. Renewal still uses command-line
+defaults for omitted flags; it does not preserve the certificate's prior features.
+
 [![CI](https://github.com/hatemosphere/protonvpn-wg-confgen/actions/workflows/ci.yml/badge.svg)](https://github.com/hatemosphere/protonvpn-wg-confgen/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/hatemosphere/protonvpn-wg-confgen?include_prereleases)](https://github.com/hatemosphere/protonvpn-wg-confgen/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -88,6 +131,7 @@ Flags are given as `--name value` or `--name=value`; the two forms are interchan
 | `allowed-ips` | *(per `--ipv6`)* | Comma-separated allowed IPs |
 | `accelerator` | `true` | VPN accelerator |
 | `port-forwarding` | `false` | NAT-PMP port forwarding (Plus tier, P2P servers) |
+| `netshield` | `0` | `0`: off, `1`: block malware, `2`: block malware, ads and trackers; applies to generation and renewal |
 | `moderate-nat` | `false` | Moderate NAT (paid plans). Cannot be combined with `--port-forwarding` |
 
 ### Certificate and session
